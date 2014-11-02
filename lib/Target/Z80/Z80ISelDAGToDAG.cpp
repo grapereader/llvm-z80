@@ -25,6 +25,7 @@ namespace {
     Z80DAGToDAGISel(Z80TargetMachine &TM, CodeGenOpt::Level OptLevel)
       : SelectionDAGISel(TM, OptLevel)
     {}
+	bool SelectInlineAsmMemoryOperand(const SDValue &Op, char ConstraintCode, std::vector<SDValue> &OutOps) override;
 #include "Z80GenDAGISel.inc"
   private:
     SDNode *Select(SDNode *N);
@@ -72,6 +73,13 @@ SDNode *Z80DAGToDAGISel::Select(SDNode *Node)
     DEBUG(errs() << "\n");
 
   return ResNode;
+}
+
+// lbd document - mark - inlineasm begin
+bool Z80DAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op, char ConstraintCode, std::vector<SDValue> &OutOps) {
+	assert(ConstraintCode == 'm' && "unexpected asm memory constraint");
+	OutOps.push_back(Op);
+	return false;
 }
 
 bool Z80DAGToDAGISel::SelectXAddr(SDValue N, SDValue &Base, SDValue &Disp)

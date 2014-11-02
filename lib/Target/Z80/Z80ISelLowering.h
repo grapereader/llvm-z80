@@ -67,6 +67,15 @@ namespace llvm {
       MachineBasicBlock *MBB) const;
     MachineBasicBlock* EmitShiftInstr(MachineInstr *MI,
       MachineBasicBlock *MBB) const;
+
+	// Inline asm support
+	ConstraintType getConstraintType(const std::string &Constraint) const override;
+	ConstraintWeight getSingleConstraintMatchWeight(AsmOperandInfo &info, const char *constraint) const override;
+	std::pair<unsigned, const TargetRegisterClass*> parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const;
+	std::pair<unsigned, const TargetRegisterClass*> getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const override;
+	void LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint, std::vector<SDValue> &Ops, SelectionDAG &DAG) const override;
+
+	bool isLegalAddressingMode(const AddrMode &AM, Type *Ty) const override;
   private:
     SDValue
       LowerCallResult(SDValue Chain, SDValue Flag,

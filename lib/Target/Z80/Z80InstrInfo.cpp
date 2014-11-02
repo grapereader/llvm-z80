@@ -77,6 +77,20 @@ void Z80InstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   llvm_unreachable("Imposible reg-to-reg copy");
 }
 
+/// Return the number of bytes of code the specified instruction may be.
+unsigned Z80InstrInfo::GetInstSizeInBytes(const MachineInstr *MI) const {
+	switch (MI->getOpcode()) {
+	default:
+		return MI->getDesc().getSize();
+	case  TargetOpcode::INLINEASM: // Inline Asm: Variable size.
+		{ 
+			const MachineFunction *MF = MI->getParent()->getParent();
+			const char *AsmStr = MI->getOperand(0).getSymbolName();
+			return getInlineAsmLength(AsmStr, *MF->getTarget().getMCAsmInfo());
+		}
+	}
+}
+
 MachineInstr *Z80InstrInfo::commuteInstruction(MachineInstr *MI,
   bool NewMI) const
 {

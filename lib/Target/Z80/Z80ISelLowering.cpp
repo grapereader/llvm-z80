@@ -69,6 +69,229 @@ Z80TargetLowering::Z80TargetLowering(Z80TargetMachine &TM)
   setOperationAction(ISD::GlobalAddress, MVT::i16, Custom);
 }
 
+//
+// Inline Assembly Support
+//
+
+Z80TargetLowering::ConstraintType Z80TargetLowering::getConstraintType(const std::string &Constraint) const
+{
+	// CPU0 constraints
+	// TODO: Look into what the Z80 actually requires here.
+	if (Constraint.size() == 1) {
+		switch (Constraint[0]) {
+			default:
+				break;
+			case 'c':
+				return C_RegisterClass;
+			case 'R':
+				return C_Memory;
+		}
+	}
+	return TargetLowering::getConstraintType(Constraint);
+}
+
+TargetLowering::ConstraintWeight Z80TargetLowering::getSingleConstraintMatchWeight(AsmOperandInfo &info, const char *constraint) const {
+	ConstraintWeight weight = CW_Invalid;
+	Value *CallOperandVal = info.CallOperandVal;
+	if (!CallOperandVal) return CW_Default;
+	Type *type = CallOperandVal->getType();
+
+	switch (*constraint) {
+		default:
+			weight = TargetLowering::getSingleConstraintMatchWeight(info, constraint);
+			break;
+		case 'c': // $t9 for indirect jumps
+				  //TODO: Check if this works with Z80, I doubt it.
+				  //      Unlikely this processor shares Z80's jump capabilities
+			if (type->isIntegerTy()) weight = CW_SpecificReg;
+			break;
+		case 'I': // signed 16 bit immediate
+		case 'J': // integer zero
+		case 'K': // unsigned 16 bit immediate
+		case 'L': // signed 32 bit immediate where lower 16 bits are 0
+				  // --> Z80 does not have 32 bit immediate
+			      // --> TODO: Verify and remove.
+		case 'N': // immediate in the range of -65535 to -1 (inclusive)
+		case 'O': // signed 15 bit immediate (+- 16383)
+		case 'P': // immediate in the range of 65535 to 1 (inclusive)
+			if (isa<ConstantInt>(CallOperandVal)) weight = CW_Constant;
+			break;
+		case 'R':
+			weight = CW_Memory;
+			break;
+	}
+	return weight;
+}
+
+static std::pair<bool, bool> parsePhysicalReg(const StringRef &C, std::string &Prefix, unsigned long long &Reg) {
+	if (C.front() != '{' || C.back() != '}') return std::make_pair(false, false);
+
+	StringRef::const_iterator I, B = C.begin() + 1, E = C.end() - 1;
+	I = std::find_if(B, E, std::ptr_fun(isdigit));
+
+	Prefix.assign(B, I - B);
+
+	if (I == E) return std::make_pair(true, false);
+
+	return std::make_pair(!getAsUnsignedInteger(StringRef(I, E - I), 10, Reg), true);
+}
+
+std::pair<unsigned, const TargetRegisterClass*> Z80TargetLowering::parseRegForInlineAsmConstraint(const StringRef &C, MVT VT) const {
+	const TargetRegisterInfo *TRI = getTargetMachine().getRegisterInfo();
+	const TargetRegisterClass *RC;
+	std::string Prefix;
+	unsigned long long Reg;
+
+	std::pair<bool, bool> R = parsePhysicalReg(C, Prefix, Reg);
+
+	if (!R.first) return std::make_pair(0U, nullptr);
+	if (!R.second) return std::make_pair(0U, nullptr);
+
+	assert(Prefix == "$");
+	RC = getRegClassFor((VT == MVT::Other) ? MVT::i32 : VT);
+
+	assert(Reg < RC->getNumRegs());
+	return std::make_pair(*(RC->begin() + Reg), RC);
+}
+
+std::pair<unsigned, const TargetRegisterClass*> Z80TargetLowering::getRegForInlineAsmConstraint(const std::string &Constraint, MVT VT) const
+{
+	if (Constraint.size() == 1) {
+		switch (Constraint[0]) {
+
+		case 'r':
+			if (VT == MVT::i8) return std::make_pair(0U, &Z80::GR8RegClass);
+			if (VT == MVT::i16) return std::make_pair(0U, &Z80::GR16RegClass);
+			return std::make_pair(0u, static_cast<const TargetRegisterClass*>(0));
+		case 'c': // register suitable for indirect jump
+				  // I have no idea if this works. TODO: Test it.
+			if (VT == MVT::i16) return std::make_pair((unsigned)Z80::BC, &Z80::GR16RegClass);
+			assert("Unexpected type.");
+		}
+	}
+
+	std::pair<unsigned, const TargetRegisterClass *> R;
+	R = parseRegForInlineAsmConstraint(Constraint, VT);
+
+	if (R.second)
+	return R;
+
+	return TargetLowering::getRegForInlineAsmConstraint(Constraint, VT);
+}
+
+void Z80TargetLowering::LowerAsmOperandForConstraint(SDValue Op, std::string &Constraint, std::vector<SDValue>&Ops, SelectionDAG &DAG) const {
+	SDValue Result;
+
+	if (Constraint.length() > 1) return;
+
+	char ConstraintLetter = Constraint[0];
+	switch (ConstraintLetter) {
+	default:
+		break;
+	case 'I': // Signed 16 bit constant
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getSExtValue();
+			if (isInt<16>(Val)) {
+			Result = DAG.getTargetConstant(Val, Type);
+			break;
+			}
+		}
+		return;
+	case 'J': // integer zero
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getZExtValue();
+			if (Val == 0) {
+			Result = DAG.getTargetConstant(0, Type);
+			break;
+			}
+		}
+		return;
+	case 'K': // unsigned 16 bit immediate
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			uint64_t Val = (uint64_t)C->getZExtValue();
+			if (isUInt<16>(Val)) {
+				Result = DAG.getTargetConstant(Val, Type);
+				break;
+			}
+		}
+	return;
+	case 'L': // signed 32 bit immediate where lower 16 bits are 0
+			  // --> Z80 does not have 32 bit immediate
+			  // --> TODO: Verify and remove.
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getSExtValue();
+			if ((isInt<32>(Val)) && ((Val & 0xffff) == 0)){
+				Result = DAG.getTargetConstant(Val, Type);
+				break;
+			}
+		}
+		return;
+	case 'N': // immediate in the range of -65535 to -1 (inclusive)
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getSExtValue();
+			if ((Val >= -65535) && (Val <= -1)) {
+				Result = DAG.getTargetConstant(Val, Type);
+				break;
+			}
+		}
+	return;
+	case 'O': // signed 15 bit immediate
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getSExtValue();
+			if ((isInt<15>(Val))) {
+				Result = DAG.getTargetConstant(Val, Type);
+				break;
+			}
+		}
+		return;
+	case 'P': // immediate in the range of 1 to 65535 (inclusive)
+		if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Op)) {
+			EVT Type = Op.getValueType();
+			int64_t Val = C->getSExtValue();
+			if ((Val <= 65535) && (Val >= 1)) {
+				Result = DAG.getTargetConstant(Val, Type);
+				break;
+			}
+		}
+		return;
+	}
+
+	if (Result.getNode()) {
+		Ops.push_back(Result);
+		return;
+	}
+
+	TargetLowering::LowerAsmOperandForConstraint(Op, Constraint, Ops, DAG);
+}
+
+bool Z80TargetLowering::isLegalAddressingMode(const AddrMode &AM, Type *Ty) const {
+	//----------------------------------------------------------------
+	// TODO: There is NO way this function works with the Z80
+	//       -> Make i-twerk
+	//----------------------------------------------------------------
+	// No global is ever allowed as a base.
+	if (AM.BaseGV) return false;
+
+	switch (AM.Scale) {
+		case 0: // "r+i" or just "i", depending on HasBaseReg.
+			break;
+		case 1:
+			// allow "r+i".
+			if (!AM.HasBaseReg) break;
+			return false; // disallow "r+r" or "r+r+i".
+		default:
+			return false;
+	}
+
+	return true;
+}
+
 //===----------------------------------------------------------------------===//
 //                      Calling Convention Implementation
 //===----------------------------------------------------------------------===//

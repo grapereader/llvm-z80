@@ -42,6 +42,8 @@ namespace llvm {
   public:
     explicit Z80InstrInfo(Z80TargetMachine &tm);
 
+	unsigned GetInstSizeInBytes(const MachineInstr *MI) const;
+
     virtual const Z80RegisterInfo &getRegisterInfo() const { return RI; }
 
     virtual void copyPhysReg(MachineBasicBlock &MBB,
