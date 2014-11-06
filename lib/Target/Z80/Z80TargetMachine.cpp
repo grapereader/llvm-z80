@@ -29,7 +29,9 @@ Z80TargetMachine::Z80TargetMachine(const Target &T, StringRef TT, StringRef CPU,
   FrameLowering(*this), InstrInfo(*this), TSInfo(*this),
   Subtarget(TT, CPU, FS), TLInfo(*this)
 {
-  initAsmInfo();
+  //initAsmInfo();
+	//Ours is better. I'm not going through the hassle of getting it to generate this "automatically"
+	AsmInfo = new Z80AsmInfo();
 }
 
 namespace {

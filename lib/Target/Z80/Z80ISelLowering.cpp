@@ -20,10 +20,12 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/Support/raw_ostream.h"
+#include "Z80TargetObjectFile.h"
+
 using namespace llvm;
 
 Z80TargetLowering::Z80TargetLowering(Z80TargetMachine &TM)
-  : TargetLowering(TM, new TargetLoweringObjectFileELF())
+	: TargetLowering(TM, new Z80TargetObjectFile())
 {
   addRegisterClass(MVT::i8, &Z80::GR8RegClass);
   addRegisterClass(MVT::i16, &Z80::GR16RegClass);

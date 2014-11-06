@@ -21,8 +21,37 @@
 #include "Z80SelectionDAGInfo.h"
 #include "Z80Subtarget.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/MC/MCAsmInfo.h"
 
 namespace llvm {
+
+	class Z80AsmInfo : public MCAsmInfo {
+	public:
+		Z80AsmInfo::Z80AsmInfo()
+		{
+			PointerSize = 2;
+			DollarIsPC = true;
+			SeparatorString = "\n";
+			InlineAsmStart = "INLINE START";
+			InlineAsmEnd = "INLINE END";
+			CommentString = ";";
+			ZeroDirective = NULL;
+			AsciiDirective = "\t.db\t";
+			AscizDirective = NULL;
+			Data16bitsDirective = "\t.dw\t";
+			Data32bitsDirective = NULL;
+			Data64bitsDirective = NULL;
+			HasSetDirective = false;
+			HasDotTypeDotSizeDirective = false;
+			HasSingleParameterDotFile = false;
+			AllowPeriodsInName = false;
+			AllowNameToStartWithDigit = false;
+			PrivateGlobalPrefix = "_";
+			GlobalPrefix = "G_";
+			GlobalDirective = ";GLOBAL "; //We can override this elsewhere when we need it.
+		}
+	};
+
   class Z80TargetMachine : public LLVMTargetMachine {
     const DataLayout DL;  // Calculates type size & alignment
     Z80FrameLowering FrameLowering;

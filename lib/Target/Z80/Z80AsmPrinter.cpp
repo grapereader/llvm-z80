@@ -15,8 +15,14 @@
 #include "Z80AsmPrinter.h"
 #include "Z80.h"
 #include "Z80MCInstLower.h"
-#include "llvm/MC/MCStreamer.h"
 #include "llvm/Support/TargetRegistry.h"
+#include "llvm/MC/MCSection.h"
+#include "llvm/IR/GlobalVariable.h"
+#include "llvm/Target/TargetLoweringObjectFile.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
+#include "llvm/Target/Mangler.h"
+
+
 using namespace llvm;
 
 void Z80AsmPrinter::EmitInstruction(const MachineInstr *MI)
@@ -26,6 +32,114 @@ void Z80AsmPrinter::EmitInstruction(const MachineInstr *MI)
   MCInst TmpInst;
   MCInstLowering.Lower(MI, TmpInst);
   OutStreamer.EmitInstruction(TmpInst);
+}
+
+//
+// Butcher the hell out of the AsmPrinter output so Z80 assemblers
+// can parse it directly.
+//
+
+bool Z80AsmPrinter::doInitialization(Module &M)
+{
+	OutStreamer.setAutoInitSections(false);
+	SmallString<128> Str1;
+	raw_svector_ostream OS1(Str1);
+
+	MMI = getAnalysisIfAvailable<MachineModuleInfo>();
+	MMI->AnalyzeModule(M);
+
+	// We need to call the parent's one explicitly.
+	// No we don't.
+	//bool Result = AsmPrinter::doInitialization(M);
+
+	// Initialize TargetLoweringObjectFile.
+	const_cast<TargetLoweringObjectFile &>(getObjFileLowering()).Initialize(OutContext, TM);
+
+	Mang = new Mangler(&TM);
+
+	// Emit header before any dwarf directives are emitted below.
+	emitHeader(M, OS1);
+	OutStreamer.EmitRawText(OS1.str());
+
+	// Emit module-level inline asm if it exists.
+	if (!M.getModuleInlineAsm().empty()) {
+		OutStreamer.AddComment("Start of file scope inline assembly");
+		OutStreamer.AddBlankLine();
+		OutStreamer.EmitRawText(StringRef(M.getModuleInlineAsm()));
+		OutStreamer.AddBlankLine();
+		OutStreamer.AddComment("End of file scope inline assembly");
+		OutStreamer.AddBlankLine();
+	}
+    
+	return false; //Apparently this is success... Fantastic.
+}
+
+void Z80AsmPrinter::emitHeader(Module &M, raw_ostream &os)
+{
+	//Because why not
+	os << "; Compiled using LLVM Z80 backend\n";
+}
+
+bool Z80AsmPrinter::doFinalization(Module &M)
+{
+	bool res = AsmPrinter::doFinalization(M);
+	//If I ever need anything at the end of the output...
+	return res;
+}
+
+void Z80AsmPrinter::EmitFunctionEntryLabel()
+{
+	//OutStreamer.EmitRawText(".global");
+	AsmPrinter::EmitFunctionEntryLabel();
+}
+
+void Z80AsmPrinter::EmitFunctionHeader() {
+  // Print out constants referenced by the function
+  EmitConstantPool();
+
+  // Print the 'header' of function.
+  const Function *F = MF->getFunction();
+
+  OutStreamer.SwitchSectionNoChange(getObjFileLowering().SectionForGlobal(F, Mang, TM));
+
+  // Emit the CurrentFnSym.
+  EmitFunctionEntryLabel();
+
+  // Emit the prefix data.
+  if (F->hasPrefixData())
+    EmitGlobalConstant(F->getPrefixData());
+}
+
+void Z80AsmPrinter::EmitFunctionBodyEnd()
+{
+	AsmPrinter::EmitFunctionBodyEnd();
+	//OutStreamer.EmitRawText(".endglobal");
+}
+
+void Z80AsmPrinter::EmitGlobalVariable(const GlobalVariable *GV)
+{
+	if (GV->hasInitializer()) {
+		// Check to see if this is a special global used by LLVM, if so, IGNORE IT.
+		if (   GV->getName() == "llvm.used"
+			|| GV->getSection() == "llvm.metadata"
+			|| GV->hasAvailableExternallyLinkage()
+			|| GV->getName() == "llvm.global_ctors"
+			|| GV->getName() == "llvm.global_dtors") return;
+	}
+
+	MCSymbol *GVSym = getSymbol(GV);
+
+	if (!GV->hasInitializer()) return;
+
+	SectionKind GVKind = TargetLoweringObjectFile::getKindForGlobal(GV, TM);
+
+	const MCSection *TheSection = getObjFileLowering().SectionForGlobal(GV, GVKind, Mang, TM);
+
+	OutStreamer.SwitchSectionNoChange(TheSection);
+
+	OutStreamer.EmitLabel(GVSym);
+	EmitGlobalConstant(GV->getInitializer());
+	OutStreamer.AddBlankLine();
 }
 
 //
@@ -99,18 +213,6 @@ void Z80AsmPrinter::printOperand(const MachineInstr *MI, int opNum, raw_ostream 
 	bool closeP = false;
 
 	if (MO.getTargetFlags()) closeP = true;
-	/* CPU0 remnants. I have no idea if these are applicable to Z80 at all, so that's a TODO.
-	switch(MO.getTargetFlags()) {
-		case Cpu0II::MO_GPREL:    O << "%gp_rel("; break;
-		case Cpu0II::MO_GOT_CALL: O << "%call16("; break;
-		case Cpu0II::MO_GOT16:    O << "%got16(";  break;
-		case Cpu0II::MO_GOT:      O << "%got(";    break;
-		case Cpu0II::MO_ABS_HI:   O << "%hi(";     break;
-		case Cpu0II::MO_ABS_LO:   O << "%lo(";     break;
-		case Cpu0II::MO_GOT_HI16: O << "%got_hi16("; break;
-		case Cpu0II::MO_GOT_LO16: O << "%got_lo16("; break;
-	}
-	*/
 
 	switch (MO.getType()) {
 	case MachineOperand::MO_Register:

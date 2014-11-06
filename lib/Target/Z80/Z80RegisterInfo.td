@@ -40,6 +40,14 @@ class Z80Reg16Class<dag reglist>
   : RegisterClass<"Z80", [i16], 8, reglist> {
 }
 
+class Z80RegInd8Class<dag reglist> : RegisterClass<"Z80", [i8], 8, reglist> {
+	let CopyCost = -1;
+}
+
+class Z80RegInd16Class<dag reglist> : RegisterClass<"Z80", [i16], 8, reglist> {
+	let CopyCost = 2;
+}
+
 //===----------------------------------------------------------------------===//
 //  Registers
 //===----------------------------------------------------------------------===//
@@ -52,10 +60,10 @@ def D : Z80Reg<"d", 2>;
 def E : Z80Reg<"e", 3>;
 def H : Z80Reg<"h", 4>;
 def L : Z80Reg<"l", 5>;
-def XH : Z80Reg<"xh", 4, 1>;
-def XL : Z80Reg<"xl", 5, 1>;
-def YH : Z80Reg<"yh", 4, 1>;
-def YL : Z80Reg<"yl", 5, 1>;
+def XH : Z80Reg<"ixh", 4, 200>;
+def XL : Z80Reg<"ixl", 5, 200>;
+def YH : Z80Reg<"iyh", 4, 200>;
+def YL : Z80Reg<"iyl", 5, 200>;
 
 // Flags register
 def FLAGS : Z80Reg<"f">;
@@ -72,8 +80,11 @@ def SP : Z80Reg<"sp">;
 def PC : Z80Reg<"pc">;
 
 def GR8  : Z80Reg8Class<(add A, B, C, D, E, H, L)>;
+
 def GR16 : Z80Reg16Class<(add BC, DE, HL, IX, IY)>;
 def BR16 : Z80Reg16Class<(add BC, DE, HL)>;
-def IR16 : Z80Reg16Class<(add IX, IY)>;
+
+def IR8  : Z80RegInd8Class<(add XL, XH, YL, YH)>;
+def IR16 : Z80RegInd16Class<(add IX, IY)>;
 
 def EXR16 : Z80Reg16Class<(add HL, DE)>;

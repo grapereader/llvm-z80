@@ -213,6 +213,7 @@ let Uses = [HL] in {
   def LD8HLi : II8<0x36, (outs), (ins i8imm:$src),
     "ld\t{(hl), $src}", [(store (i8 imm:$src), HL)]>;
 }
+
 def LD16mr : IRpI16<0x43, (outs), (ins i16imm:$Imm, GR16:$Rp),
   "ld\t{($Imm), $Rp}", [(store GR16:$Rp, iaddr:$Imm)]>, ED;
 def LD16xmr : PseudoI<(outs), (ins xmem:$dst, BR16:$src),
@@ -223,6 +224,7 @@ def LD8xmr : II8Rz<0x70, (outs), (ins xmem:$dst, GR8:$Rz),
   "ld\t{($dst), $Rz}", [(store GR8:$Rz, xaddr:$dst)]>;
 def LD8xmi : II8I8<0x36, (outs), (ins xmem:$dst, i8imm:$Imm2),
   "ld\t{($dst), $Imm2}", [(store (i8 imm:$Imm2), xaddr:$dst)]>;
+
 //===----------------------------------------------------------------------===//
 // Arithmetic Instructions
 //===----------------------------------------------------------------------===//

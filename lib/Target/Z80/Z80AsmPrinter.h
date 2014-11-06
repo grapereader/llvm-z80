@@ -19,19 +19,34 @@
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCStreamer.h"
 
 namespace llvm {
+
   class Z80AsmPrinter : public AsmPrinter {
   public:
     explicit Z80AsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
-      : AsmPrinter(TM, Streamer) {}
+		: AsmPrinter(TM, Streamer) {
+			OutStreamer.setAutoInitSections(false);
+	}
     virtual const char *getPassName() const {
       return "Z80 Assembly Printer";
     }
 	bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo, unsigned AsmVariant, const char *ExtraCode, raw_ostream &O);
 	bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo, unsigned AsmVariant, const char *ExtraCode, raw_ostream &O);
 	void printOperand(const MachineInstr *MI, int opNum, raw_ostream &O);
-    virtual void EmitInstruction(const MachineInstr *MI);
+
+	void EmitGlobalVariable(const GlobalVariable *GV);
+	void EmitFunctionEntryLabel();
+	void EmitFunctionHeader();
+	void EmitFunctionBodyEnd();
+
+	bool doInitialization(Module &M);
+	bool doFinalization(Module &M);
+
+	void emitHeader(Module &M, raw_ostream &os);
+
+	void EmitInstruction(const MachineInstr *MI);
   }; // end class Z80AsmPrinter
 } // end namespace llvm
 

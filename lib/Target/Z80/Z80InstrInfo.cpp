@@ -337,21 +337,26 @@ void Z80InstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   int FrameIndex, const TargetRegisterClass *RC,
   const TargetRegisterInfo *TRI) const
 {
-  DebugLoc dl;
-  if (MI != MBB.end()) dl = MI->getDebugLoc();
+	DebugLoc dl;
+	if (MI != MBB.end()) dl = MI->getDebugLoc();
 
-  if (RC == &Z80::GR8RegClass)
-    BuildMI(MBB, MI, dl, get(Z80::LD8xmr))
-      .addFrameIndex(FrameIndex).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill));
-  else if (RC == &Z80::BR16RegClass ||
-           Z80::BR16RegClass.contains(SrcReg)) {
-    BuildMI(MBB, MI, dl, get(Z80::LD16xmr))
-      .addFrameIndex(FrameIndex).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill));
-  }
-  else
-    llvm_unreachable("Can't store this register to stack slot");
+	if (RC == &Z80::GR8RegClass) {
+		BuildMI(MBB, MI, dl, get(Z80::LD8xmr))
+			.addFrameIndex(FrameIndex).addImm(0)
+			.addReg(SrcReg, getKillRegState(isKill));
+	} else if (RC == &Z80::BR16RegClass || Z80::BR16RegClass.contains(SrcReg)) {
+		BuildMI(MBB, MI, dl, get(Z80::LD16xmr))
+			.addFrameIndex(FrameIndex).addImm(0)
+			.addReg(SrcReg, getKillRegState(isKill));
+	} else if (RC == &Z80::GR16RegClass || Z80::GR16RegClass.contains(SrcReg)) {
+		//FIXME REALLYBAD - This allows some programs to compile... BUT. This also means it tries to
+		//use an instruction that doesn't exist: LD (IX+offs), YH/L
+		//So... something needs to be done to stop it from getting to this point altogether.
+		BuildMI(MBB, MI, dl, get(Z80::LD16xmr)).addFrameIndex(FrameIndex).addImm(0).addReg(SrcReg, getKillRegState(isKill));
+	} else {
+		llvm_unreachable("What the hell register is this?? Unable to store to stack slot!");
+	}
+	//dbgs() << "STACK SLOT STORE: CLASS: " << RC->getName() << ", SrcReg: " << std::to_string(SrcReg) << ", VIRTUAL: " << TRI->isVirtualRegister(SrcReg) << "\n";
 }
 
 void Z80InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
@@ -359,19 +364,25 @@ void Z80InstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   int FrameIndex, const TargetRegisterClass *RC,
   const TargetRegisterInfo *TRI) const
 {
-  DebugLoc dl;
-  if (MI != MBB.end()) dl = MI->getDebugLoc();
+	DebugLoc dl;
+	if (MI != MBB.end()) dl = MI->getDebugLoc();
 
-  if (RC == &Z80::GR8RegClass)
-    BuildMI(MBB, MI, dl, get(Z80::LD8rxm), DestReg)
-      .addFrameIndex(FrameIndex).addImm(0);
-  else if (RC == &Z80::BR16RegClass ||
-           Z80::BR16RegClass.contains(DestReg)) {
-    BuildMI(MBB, MI, dl, get(Z80::LD16rxm), DestReg)
-      .addFrameIndex(FrameIndex).addImm(0);
-  }
-  else
-    llvm_unreachable("Can't load this register from stack slot");
+	if (RC == &Z80::GR8RegClass) {
+		BuildMI(MBB, MI, dl, get(Z80::LD8rxm), DestReg)
+			.addFrameIndex(FrameIndex).addImm(0);
+	} else if (RC == &Z80::BR16RegClass || Z80::BR16RegClass.contains(DestReg)) {
+		BuildMI(MBB, MI, dl, get(Z80::LD16rxm), DestReg)
+			.addFrameIndex(FrameIndex).addImm(0);
+	} else if (RC == &Z80::GR16RegClass || Z80::GR16RegClass.contains(DestReg)) {
+		//FIXME REALLYBAD - This allows some programs to compile... BUT. This also means it tries to
+		//use an instruction that doesn't exist: LD (IX+offs), YH/L
+		//So... something needs to be done to stop it from getting to this point altogether.
+		BuildMI(MBB, MI, dl, get(Z80::LD16rxm), DestReg)
+			.addFrameIndex(FrameIndex).addImm(0);
+	} else {
+		llvm_unreachable("Can't load this register from stack slot");
+	}
+	//dbgs() << "STACK SLOT LOAD: CLASS: " << RC->getName() << ", SrcReg: " << std::to_string(DestReg) << ", VIRTUAL: " << TRI->isVirtualRegister(DestReg) << "\n";
 }
 
 bool Z80InstrInfo::expandPostRAPseudo(MachineBasicBlock::iterator MI) const
